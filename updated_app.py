@@ -95,7 +95,7 @@ else:
     z_score = (close_prices - rolling_mean) / rolling_std
 
     temp_df = pd.DataFrame(
-        {"Close": close_prices, "Rolling_Mean": rolling_mean, "Z_Score": z_score}
+        {"Close": close_prices, "Z_Score": z_score}
     ).dropna()
 
     if temp_df.empty:
@@ -129,11 +129,11 @@ else:
     else:
       st.success(f"✅ **{name} Status: Normal Range**")
 
-    # Clean Stacked Layout for Charts (Ensures proper scaling and full width)
-    st.markdown(f"**1. Historical Price & Moving Average ({name}):**")
-    st.line_chart(temp_df[["Close", "Rolling_Mean"]], height=300)
+    # Clean Independent Charts (Prevents axis-scaling distortion)
+    st.markdown(f"**1. Historical Price Chart ({name}):**")
+    st.line_chart(temp_df[["Close"]], height=280)
 
-    st.markdown(f"**2. Historical Z-Score Trend ({name}):**")
+    st.markdown(f"**2. Historical Z-Score Trend Line ({name}):**")
     st.line_chart(temp_df[["Z_Score"]], height=250)
 
   # --- RATIO ANALYSIS SECTION (Sensex vs Nifty 50) ---
@@ -153,7 +153,6 @@ else:
   ratio_df = pd.DataFrame(
       {
           "Ratio": ratio_series,
-          "Rolling_Avg": ratio_mean,
           "Ratio_Z_Score": ratio_z,
       }
   ).dropna()
@@ -172,7 +171,7 @@ else:
     )
     r_col2.metric("Ratio Z-Score", value=f"{latest_ratio_z:.2f}")
     r_col3.metric(
-        "Historical Avg Ratio", value=f"{ratio_df['Rolling_Avg'].iloc[-1]:.4f}"
+        "Historical Avg Ratio", value=f"{float(ratio_mean.iloc[-1]):.4f}"
     )
 
     if latest_ratio_z > 2.0:
@@ -188,9 +187,9 @@ else:
     else:
       st.success("✅ **Ratio Status: Within Normal Band**")
 
-    # Stacked Layout for Ratio Charts
-    st.markdown("**1. Historical Raw Ratio Trend (Sensex / Nifty 50):**")
-    st.line_chart(ratio_df[["Ratio", "Rolling_Avg"]], height=300)
+    # Clean Independent Ratio Charts
+    st.markdown("**1. Historical Raw Ratio Chart (Sensex / Nifty 50):**")
+    st.line_chart(ratio_df[["Ratio"]], height=280)
 
     st.markdown("**2. Historical Ratio Z-Score Trend Line:**")
     st.line_chart(ratio_df[["Ratio_Z_Score"]], height=250)
