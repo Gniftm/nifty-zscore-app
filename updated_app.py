@@ -10,11 +10,10 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-st.title("📊 Multi-Asset Z-Score Tracker: Nifty, Sensex & Ratio")
+st.title("📊 Multi-Asset Z-Score & Price Tracker: Nifty, Sensex & Ratio")
 st.markdown(
-    "Tracking individual index Z-Scores, **Min/Max extremes**, and the"
-    " **Sensex vs. Nifty 50 Ratio** performance across short and long-term"
-    " historical scopes."
+    "Tracking individual index price trends, Z-Scores, **Min/Max extremes**,"
+    " and the **Sensex vs. Nifty 50 Ratio** across selected historical scopes."
 )
 
 # Sidebar Controls for Customization
@@ -98,7 +97,11 @@ else:
       z_score = (close_prices - rolling_mean) / rolling_std
 
       temp_df = pd.DataFrame(
-          {"Close": close_prices, "Z_Score": z_score}
+          {
+              "Close": close_prices,
+              "Rolling_Mean": rolling_mean,
+              "Z_Score": z_score,
+          }
       ).dropna()
 
       if temp_df.empty:
@@ -139,8 +142,13 @@ else:
       stat_col2.metric("Min Z", f"{hist_min_z:.2f}")
       stat_col3.metric("Avg Z", f"{hist_mean_z:.2f}")
 
-      st.markdown("**Historical Z-Score Trend:**")
-      st.line_chart(temp_df[["Z_Score"]], height=250)
+      # Chart 1: Historical Raw Price vs Rolling Average
+      st.markdown(f"**1. Historical Price Trend ({name}):**")
+      st.line_chart(temp_df[["Close", "Rolling_Mean"]], height=220)
+
+      # Chart 2: Historical Z-Score Trend Line
+      st.markdown("**2. Historical Z-Score Trend:**")
+      st.line_chart(temp_df[["Z_Score"]], height=220)
 
   # --- RATIO ANALYSIS SECTION (Sensex vs Nifty 50) ---
   st.markdown("---")
