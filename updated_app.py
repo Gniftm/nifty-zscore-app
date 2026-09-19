@@ -1,5 +1,7 @@
 import numpy as np
 import pandas as pd
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 import streamlit as st
 import yfinance as yf
 
@@ -10,10 +12,11 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-st.title("📊 Multi-Asset Z-Score & Price Tracker: Nifty, Sensex & Ratio")
+st.title("📊 Multi-Asset Z-Score & Dual-Axis Chart Tracker")
 st.markdown(
     "Tracking individual index price trends, Z-Scores, **Min/Max extremes**,"
-    " and the **Sensex vs. Nifty 50 Ratio** across selected historical scopes."
+    " and **Combined Dual-Axis Charts** alongside the Sensex vs. Nifty ratio"
+    " statistics."
 )
 
 # Sidebar Controls for Customization
@@ -129,19 +132,80 @@ else:
     else:
       st.success(f"✅ **{name} Status: Normal Range**")
 
-    # Clean Independent Charts (Prevents axis-scaling distortion)
-    st.markdown(f"**1. Historical Price Chart ({name}):**")
-    st.line_chart(temp_df[["Close"]], height=280)
+    # 1. Standard Separate Charts
+    col_c1, col_c2 = st.columns(2)
+    with col_c1:
+      st.markdown(f"**Historical Price Chart ({name}):**")
+      st.line_chart(temp_df[["Close"]], height=250)
+    with col_c2:
+      st.markdown(f"**Historical Z-Score Trend ({name}):**")
+      st.line_chart(temp_df[["Z_Score"]], height=250)
 
-    st.markdown(f"**2. Historical Z-Score Trend Line ({name}):**")
-    st.line_chart(temp_df[["Z_Score"]], height=250)
+    # 2. Combined Dual-Axis Chart using Plotly
+    st.markdown(f"**🔗 Combined Price & Z-Score Chart ({name}):**")
+    fig = make_subplots(specs=[[{"secondary_y": True}]])
+
+    # Left Y-Axis: Price
+    fig.add_trace(
+        go.Scatter(
+            x=temp_df.index,
+            y=temp_df["Close"],
+            name="Price",
+            line=dict(color="#1f77b4", width=2),
+        ),
+        secondary_y=False,
+    )
+
+    # Right Y-Axis: Z-Score
+    fig.add_trace(
+        go.Scatter(
+            x=temp_df.index,
+            y=temp_df["Z_Score"],
+            name="Z-Score",
+            line=dict(color="#ff7f0e", width=1.5, dash="dot"),
+        ),
+        secondary_y=True,
+    )
+
+    # Layout styling and threshold lines
+    fig.add_hline(
+        y=2.0,
+        line_dash="dash",
+        line_color="red",
+        annotation_text="Overbought (+2.0)",
+        secondary_y=True,
+    )
+    fig.add_hline(
+        y=-2.0,
+        line_dash="dash",
+        line_color="green",
+        annotation_text="Oversold (-2.0)",
+        secondary_y=True,
+    )
+    fig.add_hline(
+        y=0.0, line_dash="solid", line_color="gray", secondary_y=True
+    )
+
+    fig.update_yaxis(title_text=f"{name} Price", secondary_y=False)
+    fig.update_yaxis(
+        title_text="Z-Score", secondary_y=True, range=[-4.5, 4.5]
+    )
+    fig.update_layout(
+        height=350,
+        margin=dict(l=20, r=20, t=30, b=20),
+        legend=dict(
+            orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1
+        ),
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
 
   # --- RATIO ANALYSIS SECTION (Sensex vs Nifty 50) ---
   st.markdown("---")
   st.subheader("⚖️ Sensex / Nifty 50 Ratio Analysis")
   st.markdown(
       "Calculated as **Sensex Price ÷ Nifty 50 Price**. Visualizing both the"
-      " absolute raw ratio movement and its statistical Z-score."
+      " absolute raw ratio movement and its statistical Z-score extremes."
   )
 
   # Compute Ratio Series and Moving Average
@@ -163,6 +227,15 @@ else:
     ratio_pct_change = ((latest_ratio - prev_ratio) / prev_ratio) * 100
     latest_ratio_z = float(ratio_df["Ratio_Z_Score"].iloc[-1])
 
+    # Compute Ratio Stats
+    max_ratio_z = float(ratio_df["Ratio_Z_Score"].max())
+    min_ratio_z = float(ratio_df["Ratio_Z_Score"].min())
+    avg_ratio_z = float(ratio_df["Ratio_Z_Score"].mean())
+
+    max_ratio_val = float(ratio_df["Ratio"].max())
+    min_ratio_val = float(ratio_df["Ratio"].min())
+
+    # Primary Ratio Metrics
     r_col1, r_col2, r_col3 = st.columns(3)
     r_col1.metric(
         "Current Ratio (Sensex/Nifty)",
@@ -173,6 +246,19 @@ else:
     r_col3.metric(
         "Historical Avg Ratio", value=f"{float(ratio_mean.iloc[-1]):.4f}"
     )
+
+    # Ratio Z-Score Range Stats
+    st.markdown("**Ratio Z-Score Range Stats (Selected Scope):**")
+    rz_col1, rz_col2, rz_col3 = st.columns(3)
+    rz_col1.metric("Max Ratio Z", f"{max_ratio_z:.2f}")
+    rz_col2.metric("Min Ratio Z", f"{min_ratio_z:.2f}")
+    rz_col3.metric("Avg Ratio Z", f"{avg_ratio_z:.2f}")
+
+    # Absolute Ratio Value Range Stats
+    st.markdown("**Absolute Ratio Value Range Stats (Selected Scope):**")
+    rv_col1, rv_col2 = st.columns(2)
+    rv_col1.metric("Max Ratio Value", f"{max_ratio_val:.4f}")
+    rv_col2.metric("Min Ratio Value", f"{min_ratio_val:.4f}")
 
     if latest_ratio_z > 2.0:
       st.warning(
@@ -187,7 +273,7 @@ else:
     else:
       st.success("✅ **Ratio Status: Within Normal Band**")
 
-    # Clean Independent Ratio Charts
+    # Ratio Charts
     st.markdown("**1. Historical Raw Ratio Chart (Sensex / Nifty 50):**")
     st.line_chart(ratio_df[["Ratio"]], height=280)
 
