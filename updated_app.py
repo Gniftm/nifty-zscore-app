@@ -83,72 +83,61 @@ else:
         " choose a longer historical scope."
     )
 
-  # --- INDIVIDUAL INDICES SECTION ---
-  col1, col2 = st.columns(2)
-  columns_list = [col1, col2]
+  # --- INDIVIDUAL INDICES SECTION (Full-Width Trackers) ---
   indices_dict = {"Nifty 50": market_df["Nifty"], "BSE Sensex": market_df["Sensex"]}
 
-  for i, (name, close_prices) in enumerate(indices_dict.items()):
-    with columns_list[i]:
-      st.subheader(f"📈 {name}")
+  for name, close_prices in indices_dict.items():
+    st.markdown("---")
+    st.subheader(f"📈 {name} Analysis")
 
-      rolling_mean = close_prices.rolling(window=window).mean()
-      rolling_std = close_prices.rolling(window=window).std()
-      z_score = (close_prices - rolling_mean) / rolling_std
+    rolling_mean = close_prices.rolling(window=window).mean()
+    rolling_std = close_prices.rolling(window=window).std()
+    z_score = (close_prices - rolling_mean) / rolling_std
 
-      temp_df = pd.DataFrame(
-          {
-              "Close": close_prices,
-              "Rolling_Mean": rolling_mean,
-              "Z_Score": z_score,
-          }
-      ).dropna()
+    temp_df = pd.DataFrame(
+        {"Close": close_prices, "Rolling_Mean": rolling_mean, "Z_Score": z_score}
+    ).dropna()
 
-      if temp_df.empty:
-        st.error(
-            "Not enough data points to compute Z-Score with the current window"
-            " size."
-        )
-        continue
-
-      latest_price = float(temp_df["Close"].iloc[-1])
-      latest_z = float(temp_df["Z_Score"].iloc[-1])
-      prev_price = float(temp_df["Close"].iloc[-2])
-      pct_change = ((latest_price - prev_price) / prev_price) * 100
-
-      m_col1, m_col2 = st.columns(2)
-      m_col1.metric(
-          "Current Price",
-          value=f"{latest_price:,.2f}",
-          delta=f"{pct_change:.2f}%",
+    if temp_df.empty:
+      st.error(
+          f"Not enough data points to compute Z-Score for {name} with the"
+          " current window size."
       )
-      m_col2.metric("Current Z-Score", value=f"{latest_z:.2f}")
+      continue
 
-      if latest_z > 2.0:
-        st.warning("⚠️ **Status: Overbought** (Z > +2.0)")
-      elif latest_z < -2.0:
-        st.info("ℹ️ **Status: Oversold** (Z < -2.0)")
-      else:
-        st.success("✅ **Status: Normal Range**")
+    latest_price = float(temp_df["Close"].iloc[-1])
+    latest_z = float(temp_df["Z_Score"].iloc[-1])
+    prev_price = float(temp_df["Close"].iloc[-2])
+    pct_change = ((latest_price - prev_price) / prev_price) * 100
 
-      # Historical Z-Score Summary Statistics (Min, Max, Avg)
-      hist_max_z = float(temp_df["Z_Score"].max())
-      hist_min_z = float(temp_df["Z_Score"].min())
-      hist_mean_z = float(temp_df["Z_Score"].mean())
+    # Metrics Display
+    m_col1, m_col2, m_col3, m_col4, m_col5 = st.columns(5)
+    m_col1.metric(
+        "Current Price",
+        value=f"{latest_price:,.2f}",
+        delta=f"{pct_change:.2f}%",
+    )
+    m_col2.metric("Current Z-Score", value=f"{latest_z:.2f}")
+    m_col3.metric("Max Z (Selected Scope)", f"{float(temp_df['Z_Score'].max()):.2f}")
+    m_col4.metric("Min Z (Selected Scope)", f"{float(temp_df['Z_Score'].min()):.2f}")
+    m_col5.metric("Avg Z (Selected Scope)", f"{float(temp_df['Z_Score'].mean()):.2f}")
 
-      st.markdown("**Z-Score Range Stats (Selected Scope):**")
-      stat_col1, stat_col2, stat_col3 = st.columns(3)
-      stat_col1.metric("Max Z", f"{hist_max_z:.2f}")
-      stat_col2.metric("Min Z", f"{hist_min_z:.2f}")
-      stat_col3.metric("Avg Z", f"{hist_mean_z:.2f}")
+    if latest_z > 2.0:
+      st.warning(f"⚠️ **{name} Status: Overbought** (Z > +2.0)")
+    elif latest_z < -2.0:
+      st.info(f"ℹ️ **{name} Status: Oversold** (Z < -2.0)")
+    else:
+      st.success(f"✅ **{name} Status: Normal Range**")
 
-      # Chart 1: Historical Raw Price vs Rolling Average
-      st.markdown(f"**1. Historical Price Trend ({name}):**")
-      st.line_chart(temp_df[["Close", "Rolling_Mean"]], height=220)
+    # Side-by-side full-size charts for Price and Z-Score
+    chart_col1, chart_col2 = st.columns(2)
+    with chart_col1:
+      st.markdown(f"**1. Historical Price Trend & Moving Average ({name}):**")
+      st.line_chart(temp_df[["Close", "Rolling_Mean"]], height=280)
 
-      # Chart 2: Historical Z-Score Trend Line
-      st.markdown("**2. Historical Z-Score Trend:**")
-      st.line_chart(temp_df[["Z_Score"]], height=220)
+    with chart_col2:
+      st.markdown(f"**2. Historical Z-Score Trend Line ({name}):**")
+      st.line_chart(temp_df[["Z_Score"]], height=280)
 
   # --- RATIO ANALYSIS SECTION (Sensex vs Nifty 50) ---
   st.markdown("---")
@@ -202,13 +191,15 @@ else:
     else:
       st.success("✅ **Ratio Status: Within Normal Band**")
 
-    # Chart 1: Raw Historical Ratio vs Its Rolling Average
-    st.markdown("**1. Historical Raw Ratio Trend (Sensex / Nifty 50):**")
-    st.line_chart(ratio_df[["Ratio", "Rolling_Avg"]], height=250)
+    # Side-by-side full-size charts for Ratio and Ratio Z-Score
+    ratio_chart_col1, ratio_chart_col2 = st.columns(2)
+    with ratio_chart_col1:
+      st.markdown("**1. Historical Raw Ratio Trend (Sensex / Nifty 50):**")
+      st.line_chart(ratio_df[["Ratio", "Rolling_Avg"]], height=280)
 
-    # Chart 2: Historical Ratio Z-Score Trend
-    st.markdown("**2. Historical Ratio Z-Score Trend Line:**")
-    st.line_chart(ratio_df[["Ratio_Z_Score"]], height=250)
+    with ratio_chart_col2:
+      st.markdown("**2. Historical Ratio Z-Score Trend Line:**")
+      st.line_chart(ratio_df[["Ratio_Z_Score"]], height=280)
 
 # Footer Note
 st.markdown("---")
