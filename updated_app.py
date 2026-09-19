@@ -141,7 +141,7 @@ else:
       st.markdown(f"**Historical Z-Score Trend ({name}):**")
       st.line_chart(temp_df[["Z_Score"]], height=250)
 
-    # 2. Combined Dual-Axis Chart using Plotly
+    # 2. Combined Dual-Axis Chart using Plotly (Fixed update_yaxes)
     st.markdown(f"**🔗 Combined Price & Z-Score Chart ({name}):**")
     fig = make_subplots(specs=[[{"secondary_y": True}]])
 
@@ -186,8 +186,8 @@ else:
         y=0.0, line_dash="solid", line_color="gray", secondary_y=True
     )
 
-    fig.update_yaxis(title_text=f"{name} Price", secondary_y=False)
-    fig.update_yaxis(
+    fig.update_yaxes(title_text=f"{name} Price", secondary_y=False)
+    fig.update_yaxes(
         title_text="Z-Score", secondary_y=True, range=[-4.5, 4.5]
     )
     fig.update_layout(
