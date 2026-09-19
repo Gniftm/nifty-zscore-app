@@ -12,23 +12,29 @@ st.set_page_config(
 
 st.title("📊 Multi-Asset Z-Score Tracker: Nifty, Sensex & Ratio")
 st.markdown(
-    "Tracking individual index Z-Scores as well as the **Sensex vs. Nifty"
-    " 50 Ratio**, its absolute historical trend, and its statistical"
-    " divergence."
+    "Tracking individual index Z-Scores, **Min/Max extremes**, and the"
+    " **Sensex vs. Nifty 50 Ratio** performance across short and long-term"
+    " historical scopes."
 )
 
 # Sidebar Controls for Customization
 st.sidebar.header("Configuration Parameters")
 window = st.sidebar.slider(
     "Rolling Window (Trading Days)",
-    min_value=10,
+    min_value=5,
     max_value=200,
     value=50,
     step=5,
-    help="Number of days used to calculate the historical mean and standard deviation.",
+    help=(
+        "Number of days used to calculate the historical mean and standard"
+        " deviation. (Note: For 1mo/3mo scopes, ensure window is smaller than"
+        " total available trading days, e.g., 10-20 days)."
+    ),
 )
 history_period = st.sidebar.selectbox(
-    "Historical Data Scope", ["6mo", "1y", "2y", "5y", "10y"], index=2
+    "Historical Data Scope",
+    ["1mo", "3mo", "6mo", "1y", "2y", "5y", "10y"],
+    index=3,  # Defaults to 1y
 )
 
 
@@ -56,7 +62,10 @@ if (
     or "^NSEI" not in close_data.columns
     or "^BSESN" not in close_data.columns
 ):
-  st.error("Could not retrieve data for Nifty 50 or Sensex.")
+  st.error(
+      "Could not retrieve data for Nifty 50 or Sensex. Try selecting a longer"
+      " historical scope if the window size is too large."
+  )
 else:
   nifty_close = close_data["^NSEI"].dropna()
   sensex_close = close_data["^BSESN"].dropna()
@@ -65,6 +74,15 @@ else:
   market_df = pd.DataFrame(
       {"Nifty": nifty_close, "Sensex": sensex_close}
   ).dropna()
+
+  # Check if data length is sufficient for the rolling window
+  if len(market_df) <= window:
+    st.warning(
+        f"⚠️ Warning: Selected rolling window ({window} days) is larger than or"
+        f" equal to the available data points ({len(market_df)} days) for"
+        f" '{history_period}'. Please lower the rolling window in the sidebar or"
+        " choose a longer historical scope."
+    )
 
   # --- INDIVIDUAL INDICES SECTION ---
   col1, col2 = st.columns(2)
@@ -82,6 +100,13 @@ else:
       temp_df = pd.DataFrame(
           {"Close": close_prices, "Z_Score": z_score}
       ).dropna()
+
+      if temp_df.empty:
+        st.error(
+            "Not enough data points to compute Z-Score with the current window"
+            " size."
+        )
+        continue
 
       latest_price = float(temp_df["Close"].iloc[-1])
       latest_z = float(temp_df["Z_Score"].iloc[-1])
@@ -102,6 +127,17 @@ else:
         st.info("ℹ️ **Status: Oversold** (Z < -2.0)")
       else:
         st.success("✅ **Status: Normal Range**")
+
+      # Historical Z-Score Summary Statistics (Min, Max, Avg)
+      hist_max_z = float(temp_df["Z_Score"].max())
+      hist_min_z = float(temp_df["Z_Score"].min())
+      hist_mean_z = float(temp_df["Z_Score"].mean())
+
+      st.markdown("**Z-Score Range Stats (Selected Scope):**")
+      stat_col1, stat_col2, stat_col3 = st.columns(3)
+      stat_col1.metric("Max Z", f"{hist_max_z:.2f}")
+      stat_col2.metric("Min Z", f"{hist_min_z:.2f}")
+      stat_col3.metric("Avg Z", f"{hist_mean_z:.2f}")
 
       st.markdown("**Historical Z-Score Trend:**")
       st.line_chart(temp_df[["Z_Score"]], height=250)
@@ -128,42 +164,43 @@ else:
       }
   ).dropna()
 
-  latest_ratio = float(ratio_df["Ratio"].iloc[-1])
-  prev_ratio = float(ratio_series.iloc[-2])
-  ratio_pct_change = ((latest_ratio - prev_ratio) / prev_ratio) * 100
-  latest_ratio_z = float(ratio_df["Ratio_Z_Score"].iloc[-1])
+  if not ratio_df.empty:
+    latest_ratio = float(ratio_df["Ratio"].iloc[-1])
+    prev_ratio = float(ratio_series.iloc[-2])
+    ratio_pct_change = ((latest_ratio - prev_ratio) / prev_ratio) * 100
+    latest_ratio_z = float(ratio_df["Ratio_Z_Score"].iloc[-1])
 
-  r_col1, r_col2, r_col3 = st.columns(3)
-  r_col1.metric(
-      "Current Ratio (Sensex/Nifty)",
-      value=f"{latest_ratio:.4f}",
-      delta=f"{ratio_pct_change:.4f}%",
-  )
-  r_col2.metric("Ratio Z-Score", value=f"{latest_ratio_z:.2f}")
-  r_col3.metric(
-      "Historical Avg Ratio", value=f"{ratio_df['Rolling_Avg'].iloc[-1]:.4f}"
-  )
-
-  if latest_ratio_z > 2.0:
-    st.warning(
-        "⚠️ **Ratio Status: Sensex is historically overvalued relative to"
-        " Nifty** (Z > +2.0)"
+    r_col1, r_col2, r_col3 = st.columns(3)
+    r_col1.metric(
+        "Current Ratio (Sensex/Nifty)",
+        value=f"{latest_ratio:.4f}",
+        delta=f"{ratio_pct_change:.4f}%",
     )
-  elif latest_ratio_z < -2.0:
-    st.info(
-        "ℹ️ **Ratio Status: Sensex is historically undervalued relative to"
-        " Nifty** (Z < -2.0)"
+    r_col2.metric("Ratio Z-Score", value=f"{latest_ratio_z:.2f}")
+    r_col3.metric(
+        "Historical Avg Ratio", value=f"{ratio_df['Rolling_Avg'].iloc[-1]:.4f}"
     )
-  else:
-    st.success("✅ **Ratio Status: Within Normal Band**")
 
-  # Chart 1: Raw Historical Ratio vs Its Rolling Average
-  st.markdown("**1. Historical Raw Ratio Trend (Sensex / Nifty 50):**")
-  st.line_chart(ratio_df[["Ratio", "Rolling_Avg"]], height=250)
+    if latest_ratio_z > 2.0:
+      st.warning(
+          "⚠️ **Ratio Status: Sensex is historically overvalued relative to"
+          " Nifty** (Z > +2.0)"
+      )
+    elif latest_ratio_z < -2.0:
+      st.info(
+          "ℹ️ **Ratio Status: Sensex is historically undervalued relative to"
+          " Nifty** (Z < -2.0)"
+      )
+    else:
+      st.success("✅ **Ratio Status: Within Normal Band**")
 
-  # Chart 2: Historical Ratio Z-Score Trend
-  st.markdown("**2. Historical Ratio Z-Score Trend Line:**")
-  st.line_chart(ratio_df[["Ratio_Z_Score"]], height=250)
+    # Chart 1: Raw Historical Ratio vs Its Rolling Average
+    st.markdown("**1. Historical Raw Ratio Trend (Sensex / Nifty 50):**")
+    st.line_chart(ratio_df[["Ratio", "Rolling_Avg"]], height=250)
+
+    # Chart 2: Historical Ratio Z-Score Trend
+    st.markdown("**2. Historical Ratio Z-Score Trend Line:**")
+    st.line_chart(ratio_df[["Ratio_Z_Score"]], height=250)
 
 # Footer Note
 st.markdown("---")
