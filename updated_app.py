@@ -13,7 +13,8 @@ st.set_page_config(
 st.title("📊 Multi-Asset Z-Score Tracker: Nifty, Sensex & Ratio")
 st.markdown(
     "Tracking individual index Z-Scores as well as the **Sensex vs. Nifty"
-    " 50 Ratio** and its historical divergence."
+    " 50 Ratio**, its absolute historical trend, and its statistical"
+    " divergence."
 )
 
 # Sidebar Controls for Customization
@@ -109,22 +110,26 @@ else:
   st.markdown("---")
   st.subheader("⚖️ Sensex / Nifty 50 Ratio Analysis")
   st.markdown(
-      "Calculated as **Sensex Price ÷ Nifty 50 Price**. Measures the relative"
-      " performance or divergence between the two benchmarks."
+      "Calculated as **Sensex Price ÷ Nifty 50 Price**. Visualizing both the"
+      " absolute raw ratio movement and its statistical Z-score."
   )
 
-  # Compute Ratio Series
+  # Compute Ratio Series and Moving Average
   ratio_series = market_df["Sensex"] / market_df["Nifty"]
   ratio_mean = ratio_series.rolling(window=window).mean()
   ratio_std = ratio_series.rolling(window=window).std()
   ratio_z = (ratio_series - ratio_mean) / ratio_std
 
   ratio_df = pd.DataFrame(
-      {"Ratio": ratio_series, "Ratio_Z_Score": ratio_z}
+      {
+          "Ratio": ratio_series,
+          "Rolling_Avg": ratio_mean,
+          "Ratio_Z_Score": ratio_z,
+      }
   ).dropna()
 
   latest_ratio = float(ratio_df["Ratio"].iloc[-1])
-  prev_ratio = float(ratio_df["Ratio"].iloc[-2])
+  prev_ratio = float(ratio_series.iloc[-2])
   ratio_pct_change = ((latest_ratio - prev_ratio) / prev_ratio) * 100
   latest_ratio_z = float(ratio_df["Ratio_Z_Score"].iloc[-1])
 
@@ -136,7 +141,7 @@ else:
   )
   r_col2.metric("Ratio Z-Score", value=f"{latest_ratio_z:.2f}")
   r_col3.metric(
-      "Historical Avg Ratio", value=f"{ratio_mean.iloc[-1]:.4f}"
+      "Historical Avg Ratio", value=f"{ratio_df['Rolling_Avg'].iloc[-1]:.4f}"
   )
 
   if latest_ratio_z > 2.0:
@@ -152,9 +157,17 @@ else:
   else:
     st.success("✅ **Ratio Status: Within Normal Band**")
 
-  st.markdown("**Historical Ratio Z-Score Trend Line:**")
+  # Chart 1: Raw Historical Ratio vs Its Rolling Average
+  st.markdown("**1. Historical Raw Ratio Trend (Sensex / Nifty 50):**")
+  st.line_chart(ratio_df[["Ratio", "Rolling_Avg"]], height=250)
+
+  # Chart 2: Historical Ratio Z-Score Trend
+  st.markdown("**2. Historical Ratio Z-Score Trend Line:**")
   st.line_chart(ratio_df[["Ratio_Z_Score"]], height=250)
 
 # Footer Note
 st.markdown("---")
-st.caption("Data source: Yahoo Finance. All Z-Scores reflect rolling window metrics.")
+st.caption(
+    "Data source: Yahoo Finance. Charts display rolling window indicators"
+    " across the selected timeframe."
+)
