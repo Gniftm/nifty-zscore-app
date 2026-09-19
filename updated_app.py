@@ -19,6 +19,26 @@ st.markdown(
     " Guidance**."
 )
 
+# --- GENERAL Z-SCORE PLAYBOOK REFERENCE GUIDE ---
+with st.expander("📖 General Z-Score Scenario Reference Guide (Click to Expand)", expanded=False):
+    st.markdown("""
+    ### How to Interpret Z-Score Scenarios (General Rules)
+    A Z-score measures how many standard deviations an asset price or ratio is away from its rolling historical mean ($Z = 0$).
+    
+    * **$Z > +2.0$ (Overbought / Extreme High):** 
+      * *Individual Index:* Price is statistically overextended to the upside. High risk of mean-reversion pullback. **General Action:** Book profits, avoid fresh longs, or consider hedging.
+      * *Ratio (Sensex/Nifty):* Sensex has massively outperformed Nifty. **General Action:** Short Sensex / Long Nifty pair trade.
+    * **$+1.0 \le Z \le +2.0$ (Upper Band / Strong Momentum):**
+      * *Individual Index:* Bullish trend, but approaching statistical stretching limits. **General Action:** Trailing stop-loss on longs; exercise caution adding fresh capital.
+    * **$-1.0 < Z < +1.0$ (Normal / Equilibrium Range):**
+      * *Individual Index / Ratio:* Market is operating cleanly within normal historical standard deviations. **General Action:** No aggressive directional changes required; follow core trend strategy.
+    * **$-2.0 \le Z < -1.0$ (Lower Band / Weakness):**
+      * *Individual Index:* Bearish pressure, approaching historical support bands. **General Action:** Watch for reversal confirmation signals.
+    * **$Z < -2.0$ (Oversold / Extreme Low):**
+      * *Individual Index:* Price is statistically oversold to the downside. High probability of an eventual snapback/bounce. **General Action:** Look for dip-buying / mean-reversion long opportunities (while minding stop-losses for structural trends).
+      * *Ratio (Sensex/Nifty):* Nifty has massively outperformed Sensex. **General Action:** Long Sensex / Short Nifty pair trade.
+    """)
+
 # Sidebar Controls for Customization
 st.sidebar.header("Configuration Parameters")
 window = st.sidebar.slider(
@@ -125,10 +145,11 @@ else:
     m_col4.metric("Min Z (Selected Scope)", f"{float(temp_df['Z_Score'].min()):.2f}")
     m_col5.metric("Avg Z (Selected Scope)", f"{float(temp_df['Z_Score'].mean()):.2f}")
 
-    # Actionable Status Description for Individual Index
+    # Real-Time Dynamic Actionable Status Description for Individual Index
     if latest_z > 2.0:
       st.warning(
-          f"⚠️ **{name} Status: OVERBOUGHT (Z > +2.0)**\n\n"
+          f"🚨 **Real-Time Dynamic Status for {name}: OVERBOUGHT (Z ="
+          f" {latest_z:.2f} > +2.0)**\n\n"
           f"* **Action Guidance:** Statistically stretched to the upside."
           " Consider **booking profits** on existing longs, avoiding fresh"
           " long entries, or exploring bearish hedges / buying put options"
@@ -136,7 +157,8 @@ else:
       )
     elif latest_z < -2.0:
       st.info(
-          f"ℹ️ **{name} Status: OVERSOLD (Z < -2.0)**\n\n"
+          f"💡 **Real-Time Dynamic Status for {name}: OVERSOLD (Z ="
+          f" {latest_z:.2f} < -2.0)**\n\n"
           f"* **Action Guidance:** Statistically stretched to the downside."
           " Consider looking for **long entry opportunities**, mean-reversion"
           " bounce plays, or buying call option spreads anticipating a recovery"
@@ -144,10 +166,11 @@ else:
       )
     else:
       st.success(
-          f"✅ **{name} Status: NORMAL RANGE ($-2.0 \le Z \le +2.0$)**\n\n"
+          f"✅ **Real-Time Dynamic Status for {name}: NORMAL RANGE (Z ="
+          f" {latest_z:.2f})**\n\n"
           f"* **Action Guidance:** Price is operating within normal statistical"
-          " bands. **No aggressive directional action required**; maintain"
-          " core trend positions."
+          " bands ($-2.0 \le Z \le +2.0$). **No aggressive directional action"
+          " required**; maintain core trend positions."
       )
 
     # 1. Standard Separate Charts
@@ -274,31 +297,33 @@ else:
     rv_col1.metric("Max Ratio Value", f"{max_ratio_val:.4f}")
     rv_col2.metric("Min Ratio Value", f"{min_ratio_val:.4f}")
 
-    # Actionable Status Description for Ratio Pair Trade
+    # Real-Time Dynamic Actionable Status Description for Ratio Pair Trade
     if latest_ratio_z > 2.0:
       st.warning(
-          "⚠️ **Ratio Status: SENSEX OVERVALUED RELATIVE TO NIFTY (Z >"
-          " +2.0)**\n\n"
-          "* **Action Guidance (Pair Trade):** Sensex has outperformed Nifty"
+          f"🚨 **Real-Time Dynamic Status for Ratio: SENSEX OVERVALUED RELATIVE"
+          f" TO NIFTY (Z = {latest_ratio_z:.2f} > +2.0)**\n\n"
+          f"* **Action Guidance (Pair Trade):** Sensex has outperformed Nifty"
           " beyond normal standard deviations. **Strategy: Short Sensex / Long"
           " Nifty** (Expect the ratio to contract/revert downward back to the"
           " mean)."
       )
     elif latest_ratio_z < -2.0:
       st.info(
-          "ℹ️ **Ratio Status: SENSEX UNDERVALUED RELATIVE TO NIFTY (Z <"
-          " -2.0)**\n\n"
-          "* **Action Guidance (Pair Trade):** Nifty has outperformed Sensex"
+          f"💡 **Real-Time Dynamic Status for Ratio: SENSEX UNDERVALUED RELATIVE"
+          f" TO NIFTY (Z = {latest_ratio_z:.2f} < -2.0)**\n\n"
+          f"* **Action Guidance (Pair Trade):** Nifty has outperformed Sensex"
           " beyond normal standard deviations. **Strategy: Long Sensex / Short"
           " Nifty** (Expect the ratio to expand/revert upward back to the"
           " mean)."
       )
     else:
       st.success(
-          "✅ **Ratio Status: NORMAL SPREAD BAND ($-2.0 \le Z \le +2.0$)**\n\n"
-          "* **Action Guidance (Pair Trade):** Ratio is operating within core"
-          " historical ranges. **Remain flat or hold existing pairs** until"
-          " an extreme threshold ($> \pm2.0$) is breached on rebalance day."
+          f"✅ **Real-Time Dynamic Status for Ratio: NORMAL SPREAD BAND (Z ="
+          f" {latest_ratio_z:.2f})**\n\n"
+          f"* **Action Guidance (Pair Trade):** Ratio is operating within core"
+          " historical ranges ($-2.0 \le Z \le +2.0$). **Remain flat or hold"
+          " existing pairs** until an extreme threshold ($> \pm2.0$) is"
+          " breached on rebalance day."
       )
 
     # Ratio Charts
