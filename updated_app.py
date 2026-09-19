@@ -12,11 +12,11 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-st.title("📊 Multi-Asset Z-Score & Dual-Axis Chart Tracker")
+st.title("📊 Multi-Asset Z-Score & Actionable Strategy Tracker")
 st.markdown(
     "Tracking individual index price trends, Z-Scores, **Min/Max extremes**,"
-    " and **Combined Dual-Axis Charts** alongside the Sensex vs. Nifty ratio"
-    " statistics."
+    " **Combined Dual-Axis Charts**, and automated **Buy/Sell Action"
+    " Guidance**."
 )
 
 # Sidebar Controls for Customization
@@ -125,12 +125,30 @@ else:
     m_col4.metric("Min Z (Selected Scope)", f"{float(temp_df['Z_Score'].min()):.2f}")
     m_col5.metric("Avg Z (Selected Scope)", f"{float(temp_df['Z_Score'].mean()):.2f}")
 
+    # Actionable Status Description for Individual Index
     if latest_z > 2.0:
-      st.warning(f"⚠️ **{name} Status: Overbought** (Z > +2.0)")
+      st.warning(
+          f"⚠️ **{name} Status: OVERBOUGHT (Z > +2.0)**\n\n"
+          f"* **Action Guidance:** Statistically stretched to the upside."
+          " Consider **booking profits** on existing longs, avoiding fresh"
+          " long entries, or exploring bearish hedges / buying put options"
+          " anticipating a mean-reversion pullback."
+      )
     elif latest_z < -2.0:
-      st.info(f"ℹ️ **{name} Status: Oversold** (Z < -2.0)")
+      st.info(
+          f"ℹ️ **{name} Status: OVERSOLD (Z < -2.0)**\n\n"
+          f"* **Action Guidance:** Statistically stretched to the downside."
+          " Consider looking for **long entry opportunities**, mean-reversion"
+          " bounce plays, or buying call option spreads anticipating a recovery"
+          " back toward the average."
+      )
     else:
-      st.success(f"✅ **{name} Status: Normal Range**")
+      st.success(
+          f"✅ **{name} Status: NORMAL RANGE ($-2.0 \le Z \le +2.0$)**\n\n"
+          f"* **Action Guidance:** Price is operating within normal statistical"
+          " bands. **No aggressive directional action required**; maintain"
+          " core trend positions."
+      )
 
     # 1. Standard Separate Charts
     col_c1, col_c2 = st.columns(2)
@@ -141,11 +159,10 @@ else:
       st.markdown(f"**Historical Z-Score Trend ({name}):**")
       st.line_chart(temp_df[["Z_Score"]], height=250)
 
-    # 2. Combined Dual-Axis Chart using Plotly (Fixed update_yaxes)
+    # 2. Combined Dual-Axis Chart using Plotly
     st.markdown(f"**🔗 Combined Price & Z-Score Chart ({name}):**")
     fig = make_subplots(specs=[[{"secondary_y": True}]])
 
-    # Left Y-Axis: Price
     fig.add_trace(
         go.Scatter(
             x=temp_df.index,
@@ -155,8 +172,6 @@ else:
         ),
         secondary_y=False,
     )
-
-    # Right Y-Axis: Z-Score
     fig.add_trace(
         go.Scatter(
             x=temp_df.index,
@@ -167,7 +182,6 @@ else:
         secondary_y=True,
     )
 
-    # Layout styling and threshold lines
     fig.add_hline(
         y=2.0,
         line_dash="dash",
@@ -260,18 +274,32 @@ else:
     rv_col1.metric("Max Ratio Value", f"{max_ratio_val:.4f}")
     rv_col2.metric("Min Ratio Value", f"{min_ratio_val:.4f}")
 
+    # Actionable Status Description for Ratio Pair Trade
     if latest_ratio_z > 2.0:
       st.warning(
-          "⚠️ **Ratio Status: Sensex is historically overvalued relative to"
-          " Nifty** (Z > +2.0)"
+          "⚠️ **Ratio Status: SENSEX OVERVALUED RELATIVE TO NIFTY (Z >"
+          " +2.0)**\n\n"
+          "* **Action Guidance (Pair Trade):** Sensex has outperformed Nifty"
+          " beyond normal standard deviations. **Strategy: Short Sensex / Long"
+          " Nifty** (Expect the ratio to contract/revert downward back to the"
+          " mean)."
       )
     elif latest_ratio_z < -2.0:
       st.info(
-          "ℹ️ **Ratio Status: Sensex is historically undervalued relative to"
-          " Nifty** (Z < -2.0)"
+          "ℹ️ **Ratio Status: SENSEX UNDERVALUED RELATIVE TO NIFTY (Z <"
+          " -2.0)**\n\n"
+          "* **Action Guidance (Pair Trade):** Nifty has outperformed Sensex"
+          " beyond normal standard deviations. **Strategy: Long Sensex / Short"
+          " Nifty** (Expect the ratio to expand/revert upward back to the"
+          " mean)."
       )
     else:
-      st.success("✅ **Ratio Status: Within Normal Band**")
+      st.success(
+          "✅ **Ratio Status: NORMAL SPREAD BAND ($-2.0 \le Z \le +2.0$)**\n\n"
+          "* **Action Guidance (Pair Trade):** Ratio is operating within core"
+          " historical ranges. **Remain flat or hold existing pairs** until"
+          " an extreme threshold ($> \pm2.0$) is breached on rebalance day."
+      )
 
     # Ratio Charts
     st.markdown("**1. Historical Raw Ratio Chart (Sensex / Nifty 50):**")
