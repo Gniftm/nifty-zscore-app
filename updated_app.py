@@ -83,7 +83,7 @@ else:
         " choose a longer historical scope."
     )
 
-  # --- INDIVIDUAL INDICES SECTION (Full-Width Trackers) ---
+  # --- INDIVIDUAL INDICES SECTION ---
   indices_dict = {"Nifty 50": market_df["Nifty"], "BSE Sensex": market_df["Sensex"]}
 
   for name, close_prices in indices_dict.items():
@@ -129,15 +129,12 @@ else:
     else:
       st.success(f"✅ **{name} Status: Normal Range**")
 
-    # Side-by-side full-size charts for Price and Z-Score
-    chart_col1, chart_col2 = st.columns(2)
-    with chart_col1:
-      st.markdown(f"**1. Historical Price Trend & Moving Average ({name}):**")
-      st.line_chart(temp_df[["Close", "Rolling_Mean"]], height=280)
+    # Clean Stacked Layout for Charts (Ensures proper scaling and full width)
+    st.markdown(f"**1. Historical Price & Moving Average ({name}):**")
+    st.line_chart(temp_df[["Close", "Rolling_Mean"]], height=300)
 
-    with chart_col2:
-      st.markdown(f"**2. Historical Z-Score Trend Line ({name}):**")
-      st.line_chart(temp_df[["Z_Score"]], height=280)
+    st.markdown(f"**2. Historical Z-Score Trend ({name}):**")
+    st.line_chart(temp_df[["Z_Score"]], height=250)
 
   # --- RATIO ANALYSIS SECTION (Sensex vs Nifty 50) ---
   st.markdown("---")
@@ -191,15 +188,12 @@ else:
     else:
       st.success("✅ **Ratio Status: Within Normal Band**")
 
-    # Side-by-side full-size charts for Ratio and Ratio Z-Score
-    ratio_chart_col1, ratio_chart_col2 = st.columns(2)
-    with ratio_chart_col1:
-      st.markdown("**1. Historical Raw Ratio Trend (Sensex / Nifty 50):**")
-      st.line_chart(ratio_df[["Ratio", "Rolling_Avg"]], height=280)
+    # Stacked Layout for Ratio Charts
+    st.markdown("**1. Historical Raw Ratio Trend (Sensex / Nifty 50):**")
+    st.line_chart(ratio_df[["Ratio", "Rolling_Avg"]], height=300)
 
-    with ratio_chart_col2:
-      st.markdown("**2. Historical Ratio Z-Score Trend Line:**")
-      st.line_chart(ratio_df[["Ratio_Z_Score"]], height=280)
+    st.markdown("**2. Historical Ratio Z-Score Trend Line:**")
+    st.line_chart(ratio_df[["Ratio_Z_Score"]], height=250)
 
 # Footer Note
 st.markdown("---")
