@@ -12,16 +12,18 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-st.title("📊 Multi-Asset Z-Score & Actionable Strategy Tracker")
+st.title("📊 Multi-Asset Z-Score & Custom Alert Tracker")
 st.markdown(
     "Tracking individual index price trends, Z-Scores, **Min/Max extremes**,"
-    " **Combined Dual-Axis Charts**, and automated **Buy/Sell Action"
-    " Guidance**."
+    " **Combined Dual-Axis Charts**, and **Custom Z-Score Trigger Alerts**."
 )
 
 # --- GENERAL Z-SCORE PLAYBOOK REFERENCE GUIDE ---
-with st.expander("📖 General Z-Score Scenario Reference Guide (Click to Expand)", expanded=False):
-    st.markdown("""
+with st.expander(
+    "📖 General Z-Score Scenario Reference Guide (Click to Expand)",
+    expanded=False,
+):
+  st.markdown("""
     ### How to Interpret Z-Score Scenarios (General Rules)
     A Z-score measures how many standard deviations an asset price or ratio is away from its rolling historical mean ($Z = 0$).
     
@@ -57,6 +59,41 @@ history_period = st.sidebar.selectbox(
     "Historical Data Scope",
     ["1mo", "3mo", "6mo", "1y", "2y", "5y", "10y"],
     index=3,  # Defaults to 1y
+)
+
+# --- CUSTOM ALERT THRESHOLD INPUTS ---
+st.sidebar.markdown("---")
+st.sidebar.header("🚨 Custom Alert Thresholds")
+st.sidebar.markdown(
+    "Set your custom Z-score limits. Notifications will trigger if current"
+    " levels breach these bounds."
+)
+
+# Nifty Custom Limits
+st.sidebar.subheader("Nifty 50 Limits")
+nifty_max_thresh = st.sidebar.number_input(
+    "Nifty Max Z-Score Trigger", value=2.0, step=0.1
+)
+nifty_min_thresh = st.sidebar.number_input(
+    "Nifty Min Z-Score Trigger", value=-2.0, step=0.1
+)
+
+# Sensex Custom Limits
+st.sidebar.subheader("Sensex Limits")
+sensex_max_thresh = st.sidebar.number_input(
+    "Sensex Max Z-Score Trigger", value=2.0, step=0.1
+)
+sensex_min_thresh = st.sidebar.number_input(
+    "Sensex Min Z-Score Trigger", value=-2.0, step=0.1
+)
+
+# Ratio Custom Limits
+st.sidebar.subheader("Ratio Limits (Sensex/Nifty)")
+ratio_max_thresh = st.sidebar.number_input(
+    "Ratio Max Z-Score Trigger", value=2.0, step=0.1
+)
+ratio_min_thresh = st.sidebar.number_input(
+    "Ratio Min Z-Score Trigger", value=-2.0, step=0.1
 )
 
 
@@ -133,6 +170,14 @@ else:
     prev_price = float(temp_df["Close"].iloc[-2])
     pct_change = ((latest_price - prev_price) / prev_price) * 100
 
+    # Assign respective custom threshold limits based on asset name
+    if "Nifty" in name:
+      custom_max = nifty_max_thresh
+      custom_min = nifty_min_thresh
+    else:
+      custom_max = sensex_max_thresh
+      custom_min = sensex_min_thresh
+
     # Metrics Display
     m_col1, m_col2, m_col3, m_col4, m_col5 = st.columns(5)
     m_col1.metric(
@@ -145,10 +190,24 @@ else:
     m_col4.metric("Min Z (Selected Scope)", f"{float(temp_df['Z_Score'].min()):.2f}")
     m_col5.metric("Avg Z (Selected Scope)", f"{float(temp_df['Z_Score'].mean()):.2f}")
 
+    # --- CUSTOM NOTIFICATION TRIGGER CHECK ---
+    if latest_z >= custom_max:
+      st.error(
+          f"🚨 **CUSTOM THRESHOLD BREACH ALERT ({name})**: Current Z-Score"
+          f" ({latest_z:.2f}) has **exceeded** your custom max limit of"
+          f" **+{custom_max:.2f}**! Consider booking profits."
+      )
+    elif latest_z <= custom_min:
+      st.error(
+          f"🚨 **CUSTOM THRESHOLD BREACH ALERT ({name})**: Current Z-Score"
+          f" ({latest_z:.2f}) has **fallen below** your custom min limit of"
+          f" **{custom_min:.2f}**! Consider dip-buying opportunities."
+      )
+
     # Real-Time Dynamic Actionable Status Description for Individual Index
     if latest_z > 2.0:
       st.warning(
-          f"🚨 **Real-Time Dynamic Status for {name}: OVERBOUGHT (Z ="
+          f"⚠️ **Real-Time Dynamic Status for {name}: OVERBOUGHT (Z ="
           f" {latest_z:.2f} > +2.0)**\n\n"
           f"* **Action Guidance:** Statistically stretched to the upside."
           " Consider **booking profits** on existing longs, avoiding fresh"
@@ -206,17 +265,17 @@ else:
     )
 
     fig.add_hline(
-        y=2.0,
+        y=custom_max,
         line_dash="dash",
-        line_color="red",
-        annotation_text="Overbought (+2.0)",
+        line_color="purple",
+        annotation_text=f"Custom Max (+{custom_max})",
         secondary_y=True,
     )
     fig.add_hline(
-        y=-2.0,
+        y=custom_min,
         line_dash="dash",
-        line_color="green",
-        annotation_text="Oversold (-2.0)",
+        line_color="brown",
+        annotation_text=f"Custom Min ({custom_min})",
         secondary_y=True,
     )
     fig.add_hline(
@@ -297,10 +356,26 @@ else:
     rv_col1.metric("Max Ratio Value", f"{max_ratio_val:.4f}")
     rv_col2.metric("Min Ratio Value", f"{min_ratio_val:.4f}")
 
+    # --- CUSTOM RATIO NOTIFICATION TRIGGER CHECK ---
+    if latest_ratio_z >= ratio_max_thresh:
+      st.error(
+          f"🚨 **CUSTOM THRESHOLD BREACH ALERT (Sensex/Nifty Ratio)**:"
+          f" Ratio Z-Score ({latest_ratio_z:.2f}) has **exceeded** your custom"
+          f" max limit of **+{ratio_max_thresh:.2f}**! Recommended Action:"
+          " Consider Short Sensex / Long Nifty."
+      )
+    elif latest_ratio_z <= ratio_min_thresh:
+      st.error(
+          f"🚨 **CUSTOM THRESHOLD BREACH ALERT (Sensex/Nifty Ratio)**:"
+          f" Ratio Z-Score ({latest_ratio_z:.2f}) has **fallen below** your"
+          f" custom min limit of **{ratio_min_thresh:.2f}**! Recommended"
+          " Action: Consider Long Sensex / Short Nifty."
+      )
+
     # Real-Time Dynamic Actionable Status Description for Ratio Pair Trade
     if latest_ratio_z > 2.0:
       st.warning(
-          f"🚨 **Real-Time Dynamic Status for Ratio: SENSEX OVERVALUED RELATIVE"
+          f"⚠️ **Real-Time Dynamic Status for Ratio: SENSEX OVERVALUED RELATIVE"
           f" TO NIFTY (Z = {latest_ratio_z:.2f} > +2.0)**\n\n"
           f"* **Action Guidance (Pair Trade):** Sensex has outperformed Nifty"
           " beyond normal standard deviations. **Strategy: Short Sensex / Long"
