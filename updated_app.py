@@ -1,3 +1,5 @@
+from email.mime.text import MIMEText
+import smtplib
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
@@ -12,11 +14,37 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-st.title("📊 Multi-Asset Z-Score & Custom Alert Tracker")
+st.title("📊 Multi-Asset Z-Score & Email Alert Tracker")
 st.markdown(
     "Tracking individual index price trends, Z-Scores, **Min/Max extremes**,"
-    " **Combined Dual-Axis Charts**, and **Custom Z-Score Trigger Alerts**."
+    " and sending automated **Email Notifications** upon custom threshold"
+    " breaches."
 )
+
+
+# --- AUTOMATED EMAIL SENDER FUNCTION ---
+def send_email_alert(subject, body):
+  try:
+    if "email" not in st.secrets:
+      return  # Silently skip if email secrets aren't configured yet
+
+    sender = st.secrets["email"]["sender"]
+    password = st.secrets["email"]["password"]
+    receiver = st.secrets["email"]["receiver"]
+
+    msg = MIMEText(body)
+    msg["Subject"] = subject
+    msg["From"] = sender
+    msg["To"] = receiver
+
+    server = smtplib.SMTP("smtp.gmail.com", 587)
+    server.starttls()
+    server.login(sender, password)
+    server.sendmail(sender, receiver, msg.as_string())
+    server.quit()
+  except Exception as e:
+    st.error(f"Failed to send email notification: {e}")
+
 
 # --- GENERAL Z-SCORE PLAYBOOK REFERENCE GUIDE ---
 with st.expander(
@@ -65,12 +93,10 @@ history_period = st.sidebar.selectbox(
 st.sidebar.markdown("---")
 st.sidebar.header("🚨 Custom Alert Thresholds")
 st.sidebar.markdown(
-    "Set your custom Z-score limits. Notifications will trigger if current"
-    " levels breach these bounds."
+    "Set your custom Z-score limits. Email notifications will trigger if"
+    " current levels breach these bounds."
 )
 
-# Nifty Custom Limits
-st.sidebar.subheader("Nifty 50 Limits")
 nifty_max_thresh = st.sidebar.number_input(
     "Nifty Max Z-Score Trigger", value=2.0, step=0.1
 )
@@ -78,8 +104,6 @@ nifty_min_thresh = st.sidebar.number_input(
     "Nifty Min Z-Score Trigger", value=-2.0, step=0.1
 )
 
-# Sensex Custom Limits
-st.sidebar.subheader("Sensex Limits")
 sensex_max_thresh = st.sidebar.number_input(
     "Sensex Max Z-Score Trigger", value=2.0, step=0.1
 )
@@ -87,8 +111,6 @@ sensex_min_thresh = st.sidebar.number_input(
     "Sensex Min Z-Score Trigger", value=-2.0, step=0.1
 )
 
-# Ratio Custom Limits
-st.sidebar.subheader("Ratio Limits (Sensex/Nifty)")
 ratio_max_thresh = st.sidebar.number_input(
     "Ratio Max Z-Score Trigger", value=2.0, step=0.1
 )
@@ -103,7 +125,6 @@ def fetch_market_data(period):
   tickers = ["^NSEI", "^BSESN"]
   df = yf.download(tickers, period=period, interval="1d", progress=False)
 
-  # Handle multi-index columns from yfinance
   if isinstance(df.columns, pd.MultiIndex):
     close_df = df["Close"]
   else:
@@ -129,12 +150,10 @@ else:
   nifty_close = close_data["^NSEI"].dropna()
   sensex_close = close_data["^BSESN"].dropna()
 
-  # Align dataframes by common dates
   market_df = pd.DataFrame(
       {"Nifty": nifty_close, "Sensex": sensex_close}
   ).dropna()
 
-  # Check if data length is sufficient for the rolling window
   if len(market_df) <= window:
     st.warning(
         f"⚠️ Warning: Selected rolling window ({window} days) is larger than or"
@@ -170,7 +189,6 @@ else:
     prev_price = float(temp_df["Close"].iloc[-2])
     pct_change = ((latest_price - prev_price) / prev_price) * 100
 
-    # Assign respective custom threshold limits based on asset name
     if "Nifty" in name:
       custom_max = nifty_max_thresh
       custom_min = nifty_min_thresh
@@ -178,7 +196,6 @@ else:
       custom_max = sensex_max_thresh
       custom_min = sensex_min_thresh
 
-    # Metrics Display
     m_col1, m_col2, m_col3, m_col4, m_col5 = st.columns(5)
     m_col1.metric(
         "Current Price",
@@ -190,49 +207,54 @@ else:
     m_col4.metric("Min Z (Selected Scope)", f"{float(temp_df['Z_Score'].min()):.2f}")
     m_col5.metric("Avg Z (Selected Scope)", f"{float(temp_df['Z_Score'].mean()):.2f}")
 
-    # --- CUSTOM NOTIFICATION TRIGGER CHECK ---
+    # --- CUSTOM NOTIFICATION TRIGGER & EMAIL DISPATCH ---
     if latest_z >= custom_max:
-      st.error(
-          f"🚨 **CUSTOM THRESHOLD BREACH ALERT ({name})**: Current Z-Score"
-          f" ({latest_z:.2f}) has **exceeded** your custom max limit of"
-          f" **+{custom_max:.2f}**! Consider booking profits."
+      alert_msg = (
+          f"🚨 CUSTOM THRESHOLD BREACH ALERT ({name}): Current Z-Score"
+          f" ({latest_z:.2f}) has exceeded your custom max limit of"
+          f" +{custom_max:.2f}!"
+      )
+      st.error(alert_msg)
+      send_email_alert(
+          f"🚨 Z-Score Max Breach Alert: {name}",
+          f"Hello,\n\n{alert_msg}\nCurrent Price: {latest_price:,.2f}\n\nCheck"
+          " your Streamlit Dashboard for full details.",
       )
     elif latest_z <= custom_min:
-      st.error(
-          f"🚨 **CUSTOM THRESHOLD BREACH ALERT ({name})**: Current Z-Score"
-          f" ({latest_z:.2f}) has **fallen below** your custom min limit of"
-          f" **{custom_min:.2f}**! Consider dip-buying opportunities."
+      alert_msg = (
+          f"🚨 CUSTOM THRESHOLD BREACH ALERT ({name}): Current Z-Score"
+          f" ({latest_z:.2f}) has fallen below your custom min limit of"
+          f" {custom_min:.2f}!"
+      )
+      st.error(alert_msg)
+      send_email_alert(
+          f"🚨 Z-Score Min Breach Alert: {name}",
+          f"Hello,\n\n{alert_msg}\nCurrent Price: {latest_price:,.2f}\n\nCheck"
+          " your Streamlit Dashboard for full details.",
       )
 
-    # Real-Time Dynamic Actionable Status Description for Individual Index
     if latest_z > 2.0:
       st.warning(
           f"⚠️ **Real-Time Dynamic Status for {name}: OVERBOUGHT (Z ="
-          f" {latest_z:.2f} > +2.0)**\n\n"
-          f"* **Action Guidance:** Statistically stretched to the upside."
-          " Consider **booking profits** on existing longs, avoiding fresh"
-          " long entries, or exploring bearish hedges / buying put options"
-          " anticipating a mean-reversion pullback."
+          f" {latest_z:.2f} > +2.0)**\n\n* **Action Guidance:** Statistically"
+          " stretched to the upside. Consider **booking profits** on existing"
+          " longs."
       )
     elif latest_z < -2.0:
       st.info(
           f"💡 **Real-Time Dynamic Status for {name}: OVERSOLD (Z ="
-          f" {latest_z:.2f} < -2.0)**\n\n"
-          f"* **Action Guidance:** Statistically stretched to the downside."
-          " Consider looking for **long entry opportunities**, mean-reversion"
-          " bounce plays, or buying call option spreads anticipating a recovery"
-          " back toward the average."
+          f" {latest_z:.2f} < -2.0)**\n\n* **Action Guidance:** Statistically"
+          " stretched to the downside. Consider looking for **long entry"
+          " opportunities**."
       )
     else:
       st.success(
           f"✅ **Real-Time Dynamic Status for {name}: NORMAL RANGE (Z ="
-          f" {latest_z:.2f})**\n\n"
-          f"* **Action Guidance:** Price is operating within normal statistical"
-          " bands ($-2.0 \le Z \le +2.0$). **No aggressive directional action"
-          " required**; maintain core trend positions."
+          f" {latest_z:.2f})**\n\n* **Action Guidance:** Price is operating"
+          " within normal statistical bands."
       )
 
-    # 1. Standard Separate Charts
+    # Charts
     col_c1, col_c2 = st.columns(2)
     with col_c1:
       st.markdown(f"**Historical Price Chart ({name}):**")
@@ -241,10 +263,8 @@ else:
       st.markdown(f"**Historical Z-Score Trend ({name}):**")
       st.line_chart(temp_df[["Z_Score"]], height=250)
 
-    # 2. Combined Dual-Axis Chart using Plotly
     st.markdown(f"**🔗 Combined Price & Z-Score Chart ({name}):**")
     fig = make_subplots(specs=[[{"secondary_y": True}]])
-
     fig.add_trace(
         go.Scatter(
             x=temp_df.index,
@@ -263,7 +283,6 @@ else:
         ),
         secondary_y=True,
     )
-
     fig.add_hline(
         y=custom_max,
         line_dash="dash",
@@ -281,7 +300,6 @@ else:
     fig.add_hline(
         y=0.0, line_dash="solid", line_color="gray", secondary_y=True
     )
-
     fig.update_yaxes(title_text=f"{name} Price", secondary_y=False)
     fig.update_yaxes(
         title_text="Z-Score", secondary_y=True, range=[-4.5, 4.5]
@@ -293,10 +311,9 @@ else:
             orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1
         ),
     )
-
     st.plotly_chart(fig, use_container_width=True)
 
-  # --- RATIO ANALYSIS SECTION (Sensex vs Nifty 50) ---
+  # --- RATIO ANALYSIS SECTION ---
   st.markdown("---")
   st.subheader("⚖️ Sensex / Nifty 50 Ratio Analysis")
   st.markdown(
@@ -304,17 +321,13 @@ else:
       " absolute raw ratio movement and its statistical Z-score extremes."
   )
 
-  # Compute Ratio Series and Moving Average
   ratio_series = market_df["Sensex"] / market_df["Nifty"]
   ratio_mean = ratio_series.rolling(window=window).mean()
   ratio_std = ratio_series.rolling(window=window).std()
   ratio_z = (ratio_series - ratio_mean) / ratio_std
 
   ratio_df = pd.DataFrame(
-      {
-          "Ratio": ratio_series,
-          "Ratio_Z_Score": ratio_z,
-      }
+      {"Ratio": ratio_series, "Ratio_Z_Score": ratio_z}
   ).dropna()
 
   if not ratio_df.empty:
@@ -323,15 +336,12 @@ else:
     ratio_pct_change = ((latest_ratio - prev_ratio) / prev_ratio) * 100
     latest_ratio_z = float(ratio_df["Ratio_Z_Score"].iloc[-1])
 
-    # Compute Ratio Stats
     max_ratio_z = float(ratio_df["Ratio_Z_Score"].max())
     min_ratio_z = float(ratio_df["Ratio_Z_Score"].min())
     avg_ratio_z = float(ratio_df["Ratio_Z_Score"].mean())
-
     max_ratio_val = float(ratio_df["Ratio"].max())
     min_ratio_val = float(ratio_df["Ratio"].min())
 
-    # Primary Ratio Metrics
     r_col1, r_col2, r_col3 = st.columns(3)
     r_col1.metric(
         "Current Ratio (Sensex/Nifty)",
@@ -343,65 +353,62 @@ else:
         "Historical Avg Ratio", value=f"{float(ratio_mean.iloc[-1]):.4f}"
     )
 
-    # Ratio Z-Score Range Stats
     st.markdown("**Ratio Z-Score Range Stats (Selected Scope):**")
     rz_col1, rz_col2, rz_col3 = st.columns(3)
     rz_col1.metric("Max Ratio Z", f"{max_ratio_z:.2f}")
     rz_col2.metric("Min Ratio Z", f"{min_ratio_z:.2f}")
     rz_col3.metric("Avg Ratio Z", f"{avg_ratio_z:.2f}")
 
-    # Absolute Ratio Value Range Stats
     st.markdown("**Absolute Ratio Value Range Stats (Selected Scope):**")
     rv_col1, rv_col2 = st.columns(2)
     rv_col1.metric("Max Ratio Value", f"{max_ratio_val:.4f}")
     rv_col2.metric("Min Ratio Value", f"{min_ratio_val:.4f}")
 
-    # --- CUSTOM RATIO NOTIFICATION TRIGGER CHECK ---
+    # --- CUSTOM RATIO NOTIFICATION TRIGGER & EMAIL DISPATCH ---
     if latest_ratio_z >= ratio_max_thresh:
-      st.error(
-          f"🚨 **CUSTOM THRESHOLD BREACH ALERT (Sensex/Nifty Ratio)**:"
-          f" Ratio Z-Score ({latest_ratio_z:.2f}) has **exceeded** your custom"
-          f" max limit of **+{ratio_max_thresh:.2f}**! Recommended Action:"
-          " Consider Short Sensex / Long Nifty."
+      alert_msg = (
+          f"🚨 CUSTOM THRESHOLD BREACH ALERT (Sensex/Nifty Ratio): Ratio Z-Score"
+          f" ({latest_ratio_z:.2f}) has exceeded your custom max limit of"
+          f" +{ratio_max_thresh:.2f}!"
+      )
+      st.error(alert_msg)
+      send_email_alert(
+          "🚨 Z-Score Max Breach Alert: Sensex/Nifty Ratio",
+          f"Hello,\n\n{alert_msg}\nRecommended Action: Consider Short Sensex /"
+          " Long Nifty.\n\nCheck your Streamlit Dashboard for full details.",
       )
     elif latest_ratio_z <= ratio_min_thresh:
-      st.error(
-          f"🚨 **CUSTOM THRESHOLD BREACH ALERT (Sensex/Nifty Ratio)**:"
-          f" Ratio Z-Score ({latest_ratio_z:.2f}) has **fallen below** your"
-          f" custom min limit of **{ratio_min_thresh:.2f}**! Recommended"
-          " Action: Consider Long Sensex / Short Nifty."
+      alert_msg = (
+          f"🚨 CUSTOM THRESHOLD BREACH ALERT (Sensex/Nifty Ratio): Ratio Z-Score"
+          f" ({latest_ratio_z:.2f}) has fallen below your custom min limit of"
+          f" {ratio_min_thresh:.2f}!"
+      )
+      st.error(alert_msg)
+      send_email_alert(
+          "🚨 Z-Score Min Breach Alert: Sensex/Nifty Ratio",
+          f"Hello,\n\n{alert_msg}\nRecommended Action: Consider Long Sensex /"
+          " Short Nifty.\n\nCheck your Streamlit Dashboard for full details.",
       )
 
-    # Real-Time Dynamic Actionable Status Description for Ratio Pair Trade
     if latest_ratio_z > 2.0:
       st.warning(
           f"⚠️ **Real-Time Dynamic Status for Ratio: SENSEX OVERVALUED RELATIVE"
-          f" TO NIFTY (Z = {latest_ratio_z:.2f} > +2.0)**\n\n"
-          f"* **Action Guidance (Pair Trade):** Sensex has outperformed Nifty"
-          " beyond normal standard deviations. **Strategy: Short Sensex / Long"
-          " Nifty** (Expect the ratio to contract/revert downward back to the"
-          " mean)."
+          f" TO NIFTY (Z = {latest_ratio_z:.2f} > +2.0)**\n\n* **Action Guidance"
+          " (Pair Trade):** Short Sensex / Long Nifty."
       )
     elif latest_ratio_z < -2.0:
       st.info(
           f"💡 **Real-Time Dynamic Status for Ratio: SENSEX UNDERVALUED RELATIVE"
-          f" TO NIFTY (Z = {latest_ratio_z:.2f} < -2.0)**\n\n"
-          f"* **Action Guidance (Pair Trade):** Nifty has outperformed Sensex"
-          " beyond normal standard deviations. **Strategy: Long Sensex / Short"
-          " Nifty** (Expect the ratio to expand/revert upward back to the"
-          " mean)."
+          f" TO NIFTY (Z = {latest_ratio_z:.2f} < -2.0)**\n\n* **Action Guidance"
+          " (Pair Trade):** Long Sensex / Short Nifty."
       )
     else:
       st.success(
           f"✅ **Real-Time Dynamic Status for Ratio: NORMAL SPREAD BAND (Z ="
-          f" {latest_ratio_z:.2f})**\n\n"
-          f"* **Action Guidance (Pair Trade):** Ratio is operating within core"
-          " historical ranges ($-2.0 \le Z \le +2.0$). **Remain flat or hold"
-          " existing pairs** until an extreme threshold ($> \pm2.0$) is"
-          " breached on rebalance day."
+          f" {latest_ratio_z:.2f})**\n\n* **Action Guidance (Pair Trade):**"
+          " Remain flat."
       )
 
-    # Ratio Charts
     st.markdown("**1. Historical Raw Ratio Chart (Sensex / Nifty 50):**")
     st.line_chart(ratio_df[["Ratio"]], height=280)
 
