@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta
 from email.mime.text import MIMEText
 import smtplib
 import numpy as np
@@ -17,9 +18,28 @@ st.set_page_config(
 st.title("📊 Multi-Asset Z-Score & Email Alert Tracker")
 st.markdown(
     "Tracking individual index price trends, Z-Scores, **Min/Max extremes**,"
-    " and sending automated **Email Notifications** upon custom threshold"
-    " breaches."
+    " **Combined Dual-Axis Charts**, and sending rate-limited **Email"
+    " Notifications** upon custom threshold breaches."
 )
+
+# --- SESSION STATE INITIALIZATION FOR RATE LIMITING ---
+if "last_alert_times" not in st.session_state:
+  st.session_state.last_alert_times = {}
+
+# Cooldown duration to prevent duplicate emails within a short window
+COOLDOWN_HOURS = 2
+
+
+def can_send_alert(alert_key):
+  if alert_key in st.session_state.last_alert_times:
+    last_time = st.session_state.last_alert_times[alert_key]
+    if datetime.now() - last_time < timedelta(hours=COOLDOWN_HOURS):
+      return False
+  return True
+
+
+def record_alert_sent(alert_key):
+  st.session_state.last_alert_times[alert_key] = datetime.now()
 
 
 # --- AUTOMATED EMAIL SENDER FUNCTION ---
@@ -53,18 +73,18 @@ with st.expander(
 ):
   st.markdown("""
     ### How to Interpret Z-Score Scenarios (General Rules)
-    A Z-score measures how many standard deviations an asset price or ratio is away from its rolling historical mean ($Z = 0$).
+    A Z-score measures how many standard deviations an asset price or ratio is away from its rolling historical mean (Z = 0).
     
-    * **$Z > +2.0$ (Overbought / Extreme High):** 
+    * **Z > +2.0 (Overbought / Extreme High):** 
       * *Individual Index:* Price is statistically overextended to the upside. High risk of mean-reversion pullback. **General Action:** Book profits, avoid fresh longs, or consider hedging.
       * *Ratio (Sensex/Nifty):* Sensex has massively outperformed Nifty. **General Action:** Short Sensex / Long Nifty pair trade.
-    * **$+1.0 \le Z \le +2.0$ (Upper Band / Strong Momentum):**
+    * **+1.0 <= Z <= +2.0 (Upper Band / Strong Momentum):**
       * *Individual Index:* Bullish trend, but approaching statistical stretching limits. **General Action:** Trailing stop-loss on longs; exercise caution adding fresh capital.
-    * **$-1.0 < Z < +1.0$ (Normal / Equilibrium Range):**
+    * **-1.0 < Z < +1.0 (Normal / Equilibrium Range):**
       * *Individual Index / Ratio:* Market is operating cleanly within normal historical standard deviations. **General Action:** No aggressive directional changes required; follow core trend strategy.
-    * **$-2.0 \le Z < -1.0$ (Lower Band / Weakness):**
+    * **-2.0 <= Z < -1.0 (Lower Band / Weakness):**
       * *Individual Index:* Bearish pressure, approaching historical support bands. **General Action:** Watch for reversal confirmation signals.
-    * **$Z < -2.0$ (Oversold / Extreme Low):**
+    * **Z < -2.0 (Oversold / Extreme Low):**
       * *Individual Index:* Price is statistically oversold to the downside. High probability of an eventual snapback/bounce. **General Action:** Look for dip-buying / mean-reversion long opportunities (while minding stop-losses for structural trends).
       * *Ratio (Sensex/Nifty):* Nifty has massively outperformed Sensex. **General Action:** Long Sensex / Short Nifty pair trade.
     """)
@@ -79,14 +99,13 @@ window = st.sidebar.slider(
     step=5,
     help=(
         "Number of days used to calculate the historical mean and standard"
-        " deviation. (Note: For 1mo/3mo scopes, ensure window is smaller than"
-        " total available trading days, e.g., 10-20 days)."
+        " deviation."
     ),
 )
 history_period = st.sidebar.selectbox(
     "Historical Data Scope",
     ["1mo", "3mo", "6mo", "1y", "2y", "5y", "10y"],
-    index=3,  # Defaults to 1y
+    index=3,
 )
 
 # --- CUSTOM ALERT THRESHOLD INPUTS ---
@@ -94,7 +113,8 @@ st.sidebar.markdown("---")
 st.sidebar.header("🚨 Custom Alert Thresholds")
 st.sidebar.markdown(
     "Set your custom Z-score limits. Email notifications will trigger if"
-    " current levels breach these bounds."
+    " current levels breach these bounds (rate-limited to 1 email every 2"
+    " hours)."
 )
 
 nifty_max_thresh = st.sidebar.number_input(
@@ -119,7 +139,7 @@ ratio_min_thresh = st.sidebar.number_input(
 )
 
 
-# Function to fetch data for both tickers efficiently
+# Function to fetch data efficiently
 @st.cache_data(ttl=300)
 def fetch_market_data(period):
   tickers = ["^NSEI", "^BSESN"]
@@ -142,10 +162,7 @@ if (
     or "^NSEI" not in close_data.columns
     or "^BSESN" not in close_data.columns
 ):
-  st.error(
-      "Could not retrieve data for Nifty 50 or Sensex. Try selecting a longer"
-      " historical scope if the window size is too large."
-  )
+  st.error("Could not retrieve data for Nifty 50 or Sensex.")
 else:
   nifty_close = close_data["^NSEI"].dropna()
   sensex_close = close_data["^BSESN"].dropna()
@@ -156,10 +173,8 @@ else:
 
   if len(market_df) <= window:
     st.warning(
-        f"⚠️ Warning: Selected rolling window ({window} days) is larger than or"
-        f" equal to the available data points ({len(market_df)} days) for"
-        f" '{history_period}'. Please lower the rolling window in the sidebar or"
-        " choose a longer historical scope."
+        f"⚠️ Warning: Selected rolling window ({window} days) is larger than"
+        f" available data points ({len(market_df)} days)."
     )
 
   # --- INDIVIDUAL INDICES SECTION ---
@@ -178,10 +193,6 @@ else:
     ).dropna()
 
     if temp_df.empty:
-      st.error(
-          f"Not enough data points to compute Z-Score for {name} with the"
-          " current window size."
-      )
       continue
 
     latest_price = float(temp_df["Close"].iloc[-1])
@@ -207,7 +218,10 @@ else:
     m_col4.metric("Min Z (Selected Scope)", f"{float(temp_df['Z_Score'].min()):.2f}")
     m_col5.metric("Avg Z (Selected Scope)", f"{float(temp_df['Z_Score'].mean()):.2f}")
 
-    # --- CUSTOM NOTIFICATION TRIGGER & EMAIL DISPATCH ---
+    # --- CUSTOM NOTIFICATION TRIGGER & RATE-LIMITED EMAIL DISPATCH ---
+    alert_key_max = f"{name}_max_breach"
+    alert_key_min = f"{name}_min_breach"
+
     if latest_z >= custom_max:
       alert_msg = (
           f"🚨 CUSTOM THRESHOLD BREACH ALERT ({name}): Current Z-Score"
@@ -215,11 +229,16 @@ else:
           f" +{custom_max:.2f}!"
       )
       st.error(alert_msg)
-      send_email_alert(
-          f"🚨 Z-Score Max Breach Alert: {name}",
-          f"Hello,\n\n{alert_msg}\nCurrent Price: {latest_price:,.2f}\n\nCheck"
-          " your Streamlit Dashboard for full details.",
-      )
+
+      # Send email only if cooldown period has passed
+      if can_send_alert(alert_key_max):
+        send_email_alert(
+            f"🚨 Z-Score Max Breach Alert: {name}",
+            f"Hello,\n\n{alert_msg}\nCurrent Price: {latest_price:,.2f}\n\nCheck"
+            " your Streamlit Dashboard for full details.",
+        )
+        record_alert_sent(alert_key_max)
+
     elif latest_z <= custom_min:
       alert_msg = (
           f"🚨 CUSTOM THRESHOLD BREACH ALERT ({name}): Current Z-Score"
@@ -227,31 +246,32 @@ else:
           f" {custom_min:.2f}!"
       )
       st.error(alert_msg)
-      send_email_alert(
-          f"🚨 Z-Score Min Breach Alert: {name}",
-          f"Hello,\n\n{alert_msg}\nCurrent Price: {latest_price:,.2f}\n\nCheck"
-          " your Streamlit Dashboard for full details.",
-      )
+
+      # Send email only if cooldown period has passed
+      if can_send_alert(alert_key_min):
+        send_email_alert(
+            f"🚨 Z-Score Min Breach Alert: {name}",
+            f"Hello,\n\n{alert_msg}\nCurrent Price: {latest_price:,.2f}\n\nCheck"
+            " your Streamlit Dashboard for full details.",
+        )
+        record_alert_sent(alert_key_min)
 
     if latest_z > 2.0:
       st.warning(
           f"⚠️ **Real-Time Dynamic Status for {name}: OVERBOUGHT (Z ="
           f" {latest_z:.2f} > +2.0)**\n\n* **Action Guidance:** Statistically"
-          " stretched to the upside. Consider **booking profits** on existing"
-          " longs."
+          " stretched to the upside."
       )
     elif latest_z < -2.0:
       st.info(
           f"💡 **Real-Time Dynamic Status for {name}: OVERSOLD (Z ="
           f" {latest_z:.2f} < -2.0)**\n\n* **Action Guidance:** Statistically"
-          " stretched to the downside. Consider looking for **long entry"
-          " opportunities**."
+          " stretched to the downside."
       )
     else:
       st.success(
           f"✅ **Real-Time Dynamic Status for {name}: NORMAL RANGE (Z ="
-          f" {latest_z:.2f})**\n\n* **Action Guidance:** Price is operating"
-          " within normal statistical bands."
+          f" {latest_z:.2f})**"
       )
 
     # Charts
@@ -317,8 +337,8 @@ else:
   st.markdown("---")
   st.subheader("⚖️ Sensex / Nifty 50 Ratio Analysis")
   st.markdown(
-      "Calculated as **Sensex Price ÷ Nifty 50 Price**. Visualizing both the"
-      " absolute raw ratio movement and its statistical Z-score extremes."
+      "Calculated as **Sensex Price ÷ Nifty 50 Price**. Visualizing both raw"
+      " ratio movement and Z-score extremes."
   )
 
   ratio_series = market_df["Sensex"] / market_df["Nifty"]
@@ -336,12 +356,6 @@ else:
     ratio_pct_change = ((latest_ratio - prev_ratio) / prev_ratio) * 100
     latest_ratio_z = float(ratio_df["Ratio_Z_Score"].iloc[-1])
 
-    max_ratio_z = float(ratio_df["Ratio_Z_Score"].max())
-    min_ratio_z = float(ratio_df["Ratio_Z_Score"].min())
-    avg_ratio_z = float(ratio_df["Ratio_Z_Score"].mean())
-    max_ratio_val = float(ratio_df["Ratio"].max())
-    min_ratio_val = float(ratio_df["Ratio"].min())
-
     r_col1, r_col2, r_col3 = st.columns(3)
     r_col1.metric(
         "Current Ratio (Sensex/Nifty)",
@@ -353,18 +367,10 @@ else:
         "Historical Avg Ratio", value=f"{float(ratio_mean.iloc[-1]):.4f}"
     )
 
-    st.markdown("**Ratio Z-Score Range Stats (Selected Scope):**")
-    rz_col1, rz_col2, rz_col3 = st.columns(3)
-    rz_col1.metric("Max Ratio Z", f"{max_ratio_z:.2f}")
-    rz_col2.metric("Min Ratio Z", f"{min_ratio_z:.2f}")
-    rz_col3.metric("Avg Ratio Z", f"{avg_ratio_z:.2f}")
+    # --- CUSTOM RATIO NOTIFICATION TRIGGER & RATE-LIMITED EMAIL ---
+    ratio_key_max = "Ratio_max_breach"
+    ratio_key_min = "Ratio_min_breach"
 
-    st.markdown("**Absolute Ratio Value Range Stats (Selected Scope):**")
-    rv_col1, rv_col2 = st.columns(2)
-    rv_col1.metric("Max Ratio Value", f"{max_ratio_val:.4f}")
-    rv_col2.metric("Min Ratio Value", f"{min_ratio_val:.4f}")
-
-    # --- CUSTOM RATIO NOTIFICATION TRIGGER & EMAIL DISPATCH ---
     if latest_ratio_z >= ratio_max_thresh:
       alert_msg = (
           f"🚨 CUSTOM THRESHOLD BREACH ALERT (Sensex/Nifty Ratio): Ratio Z-Score"
@@ -372,11 +378,15 @@ else:
           f" +{ratio_max_thresh:.2f}!"
       )
       st.error(alert_msg)
-      send_email_alert(
-          "🚨 Z-Score Max Breach Alert: Sensex/Nifty Ratio",
-          f"Hello,\n\n{alert_msg}\nRecommended Action: Consider Short Sensex /"
-          " Long Nifty.\n\nCheck your Streamlit Dashboard for full details.",
-      )
+
+      if can_send_alert(ratio_key_max):
+        send_email_alert(
+            "🚨 Z-Score Max Breach Alert: Sensex/Nifty Ratio",
+            f"Hello,\n\n{alert_msg}\nRecommended Action: Consider Short Sensex /"
+            " Long Nifty.\n\nCheck your Streamlit Dashboard for full details.",
+        )
+        record_alert_sent(ratio_key_max)
+
     elif latest_ratio_z <= ratio_min_thresh:
       alert_msg = (
           f"🚨 CUSTOM THRESHOLD BREACH ALERT (Sensex/Nifty Ratio): Ratio Z-Score"
@@ -384,11 +394,14 @@ else:
           f" {ratio_min_thresh:.2f}!"
       )
       st.error(alert_msg)
-      send_email_alert(
-          "🚨 Z-Score Min Breach Alert: Sensex/Nifty Ratio",
-          f"Hello,\n\n{alert_msg}\nRecommended Action: Consider Long Sensex /"
-          " Short Nifty.\n\nCheck your Streamlit Dashboard for full details.",
-      )
+
+      if can_send_alert(ratio_key_min):
+        send_email_alert(
+            "🚨 Z-Score Min Breach Alert: Sensex/Nifty Ratio",
+            f"Hello,\n\n{alert_msg}\nRecommended Action: Consider Long Sensex /"
+            " Short Nifty.\n\nCheck your Streamlit Dashboard for full details.",
+        )
+        record_alert_sent(ratio_key_min)
 
     if latest_ratio_z > 2.0:
       st.warning(
@@ -405,8 +418,7 @@ else:
     else:
       st.success(
           f"✅ **Real-Time Dynamic Status for Ratio: NORMAL SPREAD BAND (Z ="
-          f" {latest_ratio_z:.2f})**\n\n* **Action Guidance (Pair Trade):**"
-          " Remain flat."
+          f" {latest_ratio_z:.2f})**"
       )
 
     st.markdown("**1. Historical Raw Ratio Chart (Sensex / Nifty 50):**")
